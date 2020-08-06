@@ -215,6 +215,7 @@ class CommandHandler extends AkairoHandler {
      * @returns {Command}
      */
     findCommand(name) {
+        console.log("finding command:", name);
         return this.modules.get(this.aliases.get(name.toLowerCase()));
     }
 
