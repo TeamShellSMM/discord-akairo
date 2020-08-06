@@ -215,7 +215,10 @@ class CommandHandler extends AkairoHandler {
      * @returns {Command}
      */
     findCommand(name) {
-        console.log("finding command:", name);
+        if(name.indexOf(":") !== -1){
+            name = name.substring(0, name.indexOf(":"));
+        }
+
         return this.modules.get(this.aliases.get(name.toLowerCase()));
     }
 
