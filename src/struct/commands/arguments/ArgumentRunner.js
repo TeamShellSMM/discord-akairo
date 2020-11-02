@@ -51,6 +51,21 @@ class ArgumentRunner {
 
         const iter = generator(message, parsed, state);
         let curr = await iter.next();
+
+        if(curr.value){
+            if(['level', 'level:approved', 'level:pending', 'level:any', 'levelcode'].indexOf(curr.value.type) >= 0){
+                let purifiedChannelName = message.channel.name.replace(/[^a-zA-Z0-9\-]/g, "").toUpperCase();
+
+                //Check for SMM1 or SMM2 codes
+                if(/^[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/.test(purifiedChannelName) ||
+                    /^[1234567890QWERTYUPASDFGHJKLXCVBNM]{3}-[1234567890QWERTYUPASDFGHJKLXCVBNM]{3}-[1234567890QWERTYUPASDFGHJKLXCVBNM]{3}$/.test(purifiedChannelName)){
+                        let phraseObj = {type: 'Phrase', value: purifiedChannelName, raw: purifiedChannelName + ' '};
+                        parsed.all.unshift(phraseObj);
+                        parsed.phrases.unshift(phraseObj);
+                }
+            }
+        }
+
         while (!curr.done) {
             const value = curr.value;
             if (ArgumentRunner.isShortCircuit(value)) {
