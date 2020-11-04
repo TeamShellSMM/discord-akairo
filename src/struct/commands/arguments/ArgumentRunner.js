@@ -49,6 +49,13 @@ class ArgumentRunner {
             }
         };
 
+        const argumentDefs = Array.from(generator(message, parsed, state));
+        let argumentIndex = 1;
+        for(let def of argumentDefs){
+            def.id = argumentIndex;
+            argumentIndex++;
+        }
+
         const iter = generator(message, parsed, state);
         let curr = await iter.next();
 
@@ -66,6 +73,7 @@ class ArgumentRunner {
             }
         }
 
+        argumentIndex = 1;
         while (!curr.done) {
             const value = curr.value;
             if (ArgumentRunner.isShortCircuit(value)) {
@@ -73,13 +81,16 @@ class ArgumentRunner {
                 return value;
             }
 
-            const res = await this.runOne(message, parsed, state, new Argument(this.command, value));
+            value.id = argumentIndex;
+
+            const res = await this.runOne(message, parsed, state, new Argument(this.command, value), {all: argumentDefs, active: value});
             if (ArgumentRunner.isShortCircuit(res)) {
                 augmentRest(res);
                 return res;
             }
 
             curr = await iter.next(res);
+            argumentIndex++;
         }
 
         augmentRest(curr.value);
@@ -94,7 +105,7 @@ class ArgumentRunner {
      * @param {Argument} arg - Current argument.
      * @returns {Promise<Flag|any>}
      */
-    runOne(message, parsed, state, arg) {
+    runOne(message, parsed, state, arg, argumentDefs = []) {
         const cases = {
             [ArgumentMatches.PHRASE]: this.runPhrase,
             [ArgumentMatches.FLAG]: this.runFlag,
@@ -112,7 +123,7 @@ class ArgumentRunner {
             throw new AkairoError('UNKNOWN_MATCH_TYPE', arg.match);
         }
 
-        return runFn.call(this, message, parsed, state, arg);
+        return runFn.call(this, message, parsed, state, arg, argumentDefs);
     }
 
     /**
@@ -123,7 +134,7 @@ class ArgumentRunner {
      * @param {Argument} arg - Current argument.
      * @returns {Promise<Flag|any>}
      */
-    async runPhrase(message, parsed, state, arg) {
+    async runPhrase(message, parsed, state, arg, argumentDefs = []) {
         if (arg.unordered || arg.unordered === 0) {
             const indices = typeof unordered === 'number'
                 ? Array.from(parsed.phrases.keys()).slice(arg.unordered)
@@ -138,7 +149,7 @@ class ArgumentRunner {
 
                 const phrase = parsed.phrases[i] ? parsed.phrases[i].value : '';
                 // `cast` is used instead of `process` since we do not want prompts.
-                const res = await arg.cast(message, phrase);
+                const res = await arg.cast(message, phrase, argumentDefs);
                 if (res != null) {
                     state.usedIndices.add(i);
                     return res;
@@ -146,11 +157,11 @@ class ArgumentRunner {
             }
 
             // No indices matched.
-            return arg.process(message, '');
+            return arg.process(message, '', argumentDefs);
         }
 
         const index = arg.index == null ? state.phraseIndex : arg.index;
-        const ret = arg.process(message, parsed.phrases[index] ? parsed.phrases[index].value : '');
+        const ret = arg.process(message, parsed.phrases[index] ? parsed.phrases[index].value : '', argumentDefs);
         if (arg.index == null) {
             ArgumentRunner.increaseIndex(parsed, state);
         }
@@ -166,10 +177,10 @@ class ArgumentRunner {
      * @param {Argument} arg - Current argument.
      * @returns {Promise<Flag|any>}
      */
-    async runRest(message, parsed, state, arg) {
+    async runRest(message, parsed, state, arg, argumentDefs = []) {
         const index = arg.index == null ? state.phraseIndex : arg.index;
         const rest = parsed.phrases.slice(index, index + arg.limit).map(x => x.raw).join('').trim();
-        const ret = await arg.process(message, rest);
+        const ret = await arg.process(message, rest, argumentDefs);
         if (arg.index == null) {
             ArgumentRunner.increaseIndex(parsed, state);
         }
@@ -185,11 +196,11 @@ class ArgumentRunner {
      * @param {Argument} arg - Current argument.
      * @returns {Promise<Flag|any>}
      */
-    async runSeparate(message, parsed, state, arg) {
+    async runSeparate(message, parsed, state, arg, argumentDefs = []) {
         const index = arg.index == null ? state.phraseIndex : arg.index;
         const phrases = parsed.phrases.slice(index, index + arg.limit);
         if (!phrases.length) {
-            const ret = await arg.process(message, '');
+            const ret = await arg.process(message, '', argumentDefs);
             if (arg.index != null) {
                 ArgumentRunner.increaseIndex(parsed, state);
             }
@@ -199,7 +210,7 @@ class ArgumentRunner {
 
         const res = [];
         for (const phrase of phrases) {
-            const response = await arg.process(message, phrase.value);
+            const response = await arg.process(message, phrase.value, argumentDefs);
 
             if (Flag.is(response, 'cancel')) {
                 return response;
@@ -252,7 +263,7 @@ class ArgumentRunner {
      * @param {Argument} arg - Current argument.
      * @returns {Promise<Flag|any>}
      */
-    async runOption(message, parsed, state, arg) {
+    async runOption(message, parsed, state, arg, argumentDefs = []) {
         const names = Array.isArray(arg.flag) ? arg.flag : [arg.flag];
         if (arg.multipleFlags) {
             const values = parsed.optionFlags.filter(flag =>
@@ -263,7 +274,7 @@ class ArgumentRunner {
 
             const res = [];
             for (const value of values) {
-                res.push(await arg.process(message, value));
+                res.push(await arg.process(message, value, argumentDefs));
             }
 
             return res;
@@ -275,7 +286,7 @@ class ArgumentRunner {
             )
         );
 
-        return arg.process(message, foundFlag != null ? foundFlag.value : '');
+        return arg.process(message, foundFlag != null ? foundFlag.value : '', argumentDefs);
     }
 
     /**
@@ -286,10 +297,10 @@ class ArgumentRunner {
      * @param {Argument} arg - Current argument.
      * @returns {Promise<Flag|any>}
      */
-    runText(message, parsed, state, arg) {
+    runText(message, parsed, state, arg, argumentDefs = []) {
         const index = arg.index == null ? 0 : arg.index;
         const text = parsed.phrases.slice(index, index + arg.limit).map(x => x.raw).join('').trim();
-        return arg.process(message, text);
+        return arg.process(message, text, argumentDefs);
     }
 
     /**
@@ -300,10 +311,10 @@ class ArgumentRunner {
      * @param {Argument} arg - Current argument.
      * @returns {Promise<Flag|any>}
      */
-    runContent(message, parsed, state, arg) {
+    runContent(message, parsed, state, arg, argumentDefs = []) {
         const index = arg.index == null ? 0 : arg.index;
         const content = parsed.all.slice(index, index + arg.limit).map(x => x.raw).join('').trim();
-        return arg.process(message, content);
+        return arg.process(message, content, argumentDefs);
     }
 
     /**
@@ -314,10 +325,10 @@ class ArgumentRunner {
      * @param {Argument} arg - Current argument.
      * @returns {Promise<Flag|any>}
      */
-    async runRestContent(message, parsed, state, arg) {
+    async runRestContent(message, parsed, state, arg, argumentDefs = []) {
         const index = arg.index == null ? state.index : arg.index;
         const rest = parsed.all.slice(index, index + arg.limit).map(x => x.raw).join('').trim();
-        const ret = await arg.process(message, rest);
+        const ret = await arg.process(message, rest, argumentDefs);
         if (arg.index == null) {
             ArgumentRunner.increaseIndex(parsed, state);
         }
@@ -333,8 +344,8 @@ class ArgumentRunner {
      * @param {Argument} arg - Current argument.
      * @returns {Promise<Flag|any>}
      */
-    runNone(message, parsed, state, arg) {
-        return arg.process(message, '');
+    runNone(message, parsed, state, arg, argumentDefs = []) {
+        return arg.process(message, '', argumentDefs);
     }
 
     /**

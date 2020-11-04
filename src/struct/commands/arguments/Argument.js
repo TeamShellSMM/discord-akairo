@@ -116,7 +116,7 @@ class Argument {
      * @param {string} phrase - The phrase to process.
      * @returns {Promise<Flag|any>}
      */
-    async process(message, phrase) {
+    async process(message, phrase, argumentDefs = []) {
         const commandDefs = this.command.argumentDefaults;
         const handlerDefs = this.handler.argumentDefaults;
         const optional = choice(
@@ -166,7 +166,7 @@ class Argument {
             return intoCallable(this.default)(message, { phrase, failure: null });
         }
 
-        const res = await this.cast(message, phrase);
+        const res = await this.cast(message, phrase, argumentDefs);
         if (Argument.isFailure(res)) {
             if (this.otherwise != null) {
                 return doOtherwise(res);
@@ -190,8 +190,8 @@ class Argument {
      * @param {string} phrase - Phrase to process.
      * @returns {Promise<any>}
      */
-    cast(message, phrase) {
-        return Argument.cast(this.type, this.handler.resolver, message, phrase);
+    cast(message, phrase, argumentDefs = []) {
+        return Argument.cast(this.type, this.handler.resolver, message, phrase, argumentDefs);
     }
 
     /**
@@ -351,7 +351,7 @@ class Argument {
      * @param {string} phrase - Phrase to process.
      * @returns {Promise<any>}
      */
-    static async cast(type, resolver, message, phrase) {
+    static async cast(type, resolver, message, phrase, argumentDefs = []) {
         if (Array.isArray(type)) {
             for (const entry of type) {
                 if (Array.isArray(entry)) {
@@ -390,7 +390,7 @@ class Argument {
         }
 
         if (resolver.type(type)) {
-            let res = resolver.type(type).call(this, message, phrase);
+            let res = resolver.type(type).call(this, message, phrase, argumentDefs);
             if (isPromise(res)) res = await res;
             return res;
         }
