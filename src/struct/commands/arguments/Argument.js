@@ -10,6 +10,7 @@ const { choice, intoCallable, isPromise } = require('../../../util/Util');
 class Argument {
     constructor(command, {
         id = null,
+        description = null,
         match = ArgumentMatches.PHRASE,
         type = ArgumentTypes.STRING,
         flag = null,
@@ -26,7 +27,7 @@ class Argument {
          * The argument name
          * @type {Command}
          */
-        this.name = id;
+        this.name = description ? description : id;
 
         /**
          * The command this argument belongs to.
